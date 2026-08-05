@@ -1,0 +1,17 @@
+# Declarative Automation Bundle sketch. This file has not been live-deployed.
+resources:
+  pipelines:
+    orders_recovery:
+      name: ${bundle.target}-orders-recovery-reference
+      catalog: ${var.catalog}
+      target: ${var.schema}
+      channel: PREVIEW
+      continuous: false
+      serverless: true
+      libraries:
+        - file:
+            path: ../databricks/transformations/orders_pipeline.py
+      configuration:
+        source.orders_table: ${var.bronze_orders_table}
+        recovery.profile_digest: ${var.mapping_profile_digest}
+      development: true

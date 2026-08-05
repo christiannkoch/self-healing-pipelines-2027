@@ -1,0 +1,37 @@
+[
+  {
+    "case": "null canonical validity",
+    "unsafe_expression": "NOT canonical_valid",
+    "required_expression": "canonical_valid IS NOT TRUE"
+  },
+  {
+    "case": "null v3 profile digest",
+    "unsafe_expression": "applied_profile_digest <> :required_profile_digest",
+    "required_expression": "applied_profile_digest IS DISTINCT FROM :required_profile_digest"
+  },
+  {
+    "case": "null winner payload version",
+    "unsafe_expression": "c.payload_version <> 'v3'",
+    "required_expression": "c.payload_version IS DISTINCT FROM 'v3'"
+  },
+  {
+    "case": "null winner canonical validity",
+    "unsafe_expression": "NOT c.canonical_valid",
+    "required_expression": "c.canonical_valid IS NOT TRUE"
+  },
+  {
+    "case": "null winner profile digest",
+    "unsafe_expression": "c.applied_profile_digest <> :required_profile_digest",
+    "required_expression": "c.applied_profile_digest IS DISTINCT FROM :required_profile_digest"
+  },
+  {
+    "case": "null candidate currency",
+    "unsafe_expression": "c.currency <> s.currency",
+    "required_expression": "c.currency IS DISTINCT FROM s.currency"
+  },
+  {
+    "case": "null required profile parameter",
+    "unsafe_expression": "COALESCE(:required_profile_digest",
+    "required_expression": "WHEN :required_profile_digest IS NULL THEN 1"
+  }
+]

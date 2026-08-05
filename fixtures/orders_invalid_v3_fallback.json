@@ -1,0 +1,35 @@
+[
+  {
+    "transport_id": "delivery-v2-unsafe",
+    "partner": "marketplace_it",
+    "payload_version": "v2",
+    "order_id": "order-unsafe",
+    "source_sequence": 9,
+    "event_type": "REFUND",
+    "event_time": "2027-11-26T08:09:00Z",
+    "ingested_at": "2027-11-26T08:09:00Z",
+    "customer_id": "customer-redacted-c",
+    "order_total_minor": -850,
+    "currency": "EUR"
+  },
+  {
+    "transport_id": "delivery-v3-unsafe",
+    "partner": "marketplace_it",
+    "payload_version": "v3",
+    "order_id": "order-unsafe",
+    "source_sequence": 9,
+    "event_type": "REFUND",
+    "event_time": "2027-11-26T08:09:00Z",
+    "ingested_at": "2027-11-26T08:09:01Z",
+    "rescued_data": {
+      "buyer": {
+        "customerId": "customer-redacted-c"
+      },
+      "grossAmount": {
+        "units": -8,
+        "nanos": 500000000,
+        "currencyCode": "EUR"
+      }
+    }
+  }
+]

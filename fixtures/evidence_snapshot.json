@@ -1,0 +1,32 @@
+{
+  "source_fingerprint": "sha256:marketplace-it-v3-2027-11-26",
+  "native_retry_exhausted": true,
+  "affected_start": "2027-11-26T08:00:00Z",
+  "affected_end": "2027-11-26T08:20:00Z",
+  "source_replayable_from": "2027-11-19T00:00:00Z",
+  "source_replayable_until": "2027-11-27T00:00:00Z",
+  "quarantine_ratio": 0.05,
+  "estimated_rows": 2,
+  "estimated_dbus": 0.5,
+  "downstream_assets": [
+    "commerce.orders_gold",
+    "commerce.daily_revenue"
+  ],
+  "candidate_profile_ids": [
+    "marketplace-v3-gross-eur-v2"
+  ],
+  "evidence_event_ids": [
+    "event-schema-rescue-spike",
+    "event-native-retry-exhausted",
+    "event-v3-fingerprint"
+  ],
+  "redacted_samples": [
+    "v3 sale with nested EUR grossAmount; identifiers removed",
+    "v3 refund with negative units and nanos; identifiers removed"
+  ],
+  "business_checks": {
+    "expected_currency": "EUR",
+    "settlement_feed_available": true,
+    "overlapping_payload_versions": "v2,v3"
+  }
+}

@@ -1,0 +1,27 @@
+# Illustrative only: validate against the exact CLI/workspace before deployment.
+bundle:
+  name: self_healing_pipelines_2027
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Existing Unity Catalog catalog used by the isolated trial.
+  schema:
+    description: Existing non-production schema used by the isolated trial.
+  bronze_orders_table:
+    description: Fully qualified immutable bronze source table.
+  mapping_profile_digest:
+    description: SHA-256 digest of the reviewed marketplace v3 mapping profile.
+
+targets:
+  dev:
+    default: true
+    mode: development
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+
+  # Production is intentionally not configured. Add a separately reviewed
+  # target, service principal, permissions, and durable incident store only
+  # after validating the preview API and recovery semantics in isolation.

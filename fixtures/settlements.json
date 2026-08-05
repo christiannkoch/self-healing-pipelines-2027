@@ -1,0 +1,16 @@
+[
+  {
+    "partner": "marketplace_it",
+    "order_id": "order-100",
+    "source_sequence": 1,
+    "currency": "EUR",
+    "settled_amount_minor": 124995
+  },
+  {
+    "partner": "marketplace_it",
+    "order_id": "order-101",
+    "source_sequence": 2,
+    "currency": "EUR",
+    "settled_amount_minor": -850
+  }
+]
