@@ -6,10 +6,9 @@ into code: an agent may interpret an incident, but deterministic policy,
 authenticated approval where required, a fenced worker, and independent proof
 control whether a bounded replay may reach production.
 
-The publication target for this companion is
-[christiannkoch/self-healing-pipelines-2027](https://github.com/christiannkoch/self-healing-pipelines-2027).
-That remote is still pending publication; this local checkout is the controlling
-copy until it appears there.
+The public companion is
+[christiannkoch/self-healing-pipelines-2027](https://github.com/christiannkoch/self-healing-pipelines-2027),
+and this checkout tracks its `main` branch.
 
 The default path is deliberately offline. It reads local fixtures, uses a
 rule-based stand-in for the agent, records state in memory, and executes through
@@ -79,7 +78,7 @@ input is messy. It is a poor place to hide the blast radius.
 
 Python 3.11 or newer is required.
 
-After the pending public repository is published, a fresh checkout will use:
+A fresh checkout uses:
 
 ```powershell
 git clone https://github.com/christiannkoch/self-healing-pipelines-2027.git
