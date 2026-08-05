@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Protocol, Sequence
+from types import MappingProxyType
+from typing import Literal, Mapping, Protocol, Sequence
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from .contracts import IncidentEvidence
 
@@ -15,24 +16,54 @@ class EvidenceSnapshot(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    source_table: str
+    source_delta_version: int = Field(ge=0, strict=True)
     source_fingerprint: str
-    native_retry_exhausted: bool
+    native_retry_exhausted: bool = Field(strict=True)
     affected_start: datetime
     affected_end: datetime
     source_replayable_from: datetime
     source_replayable_until: datetime
-    quarantine_ratio: float = Field(ge=0, le=1)
-    estimated_rows: int = Field(ge=0)
-    estimated_dbus: float = Field(ge=0)
-    downstream_assets: list[str] = Field(default_factory=list)
-    candidate_profile_ids: list[str] = Field(default_factory=list)
-    evidence_event_ids: list[str] = Field(min_length=1)
-    redacted_samples: list[str] = Field(default_factory=list)
-    business_checks: dict[str, float | int | str | bool] = Field(default_factory=dict)
+    quarantine_ratio: float = Field(strict=True, ge=0, le=1, allow_inf_nan=False)
+    estimated_rows: int = Field(strict=True, ge=0)
+    estimated_dbus: float = Field(strict=True, ge=0, allow_inf_nan=False)
+    downstream_assets: tuple[str, ...] = Field(default_factory=tuple)
+    candidate_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
+    evidence_event_ids: tuple[str, ...] = Field(min_length=1)
+    redacted_samples: tuple[str, ...] = Field(default_factory=tuple)
+    redaction_attested: Literal[True]
+    business_checks: Mapping[str, float | int | str | bool] = Field(
+        default_factory=dict,
+        max_length=20,
+    )
+
+    @field_validator("redaction_attested", mode="before")
+    @classmethod
+    def require_explicit_redaction_attestation(cls, value: object) -> object:
+        """Reject integer or string coercion at the repository boundary."""
+
+        if value is not True:
+            raise ValueError("redaction_attested must be the literal boolean true")
+        return value
+
+    @field_validator("business_checks", mode="after")
+    @classmethod
+    def freeze_business_checks(
+        cls,
+        value: Mapping[str, float | int | str | bool],
+    ) -> Mapping[str, float | int | str | bool]:
+        return MappingProxyType(dict(value))
+
+    @field_serializer("business_checks")
+    def serialize_business_checks(
+        self,
+        value: Mapping[str, float | int | str | bool],
+    ) -> dict[str, float | int | str | bool]:
+        return dict(value)
 
 
 class EvidenceRepository(Protocol):
-    """Read-only port implemented by SQL, fixtures, or another evidence store."""
+    """Read-only port whose implementation must redact samples before return."""
 
     def snapshot(self, *, partner: str, payload_version: str) -> EvidenceSnapshot:
         """Return one bounded snapshot without exposing unrestricted source rows."""
@@ -59,10 +90,10 @@ class StaticEvidenceRepository:
         return self._snapshot
 
 
-def _bounded(values: Sequence[str], limit: int) -> list[str]:
+def _bounded(values: Sequence[str], limit: int) -> tuple[str, ...]:
     """Sort and cap evidence so model input is stable and size-limited."""
 
-    return sorted(dict.fromkeys(values))[:limit]
+    return tuple(sorted(dict.fromkeys(values))[:limit])
 
 
 def build_failure_passport(
@@ -91,6 +122,8 @@ def build_failure_passport(
         detected_at=now,
         pipeline_id=pipeline_id,
         dataset=dataset,
+        source_table=snapshot.source_table,
+        source_delta_version=snapshot.source_delta_version,
         partner=partner,
         payload_version=payload_version,
         source_fingerprint=snapshot.source_fingerprint,
@@ -107,6 +140,6 @@ def build_failure_passport(
         candidate_profile_ids=_bounded(snapshot.candidate_profile_ids, 20),
         evidence_event_ids=_bounded(snapshot.evidence_event_ids, 50),
         redacted_samples=_bounded(snapshot.redacted_samples, 10),
+        redaction_attested=snapshot.redaction_attested,
         business_checks=snapshot.business_checks,
     )
-

@@ -1,4 +1,6 @@
 {
+  "source_table": "commerce.orders_bronze",
+  "source_delta_version": 2718,
   "source_fingerprint": "sha256:marketplace-it-v3-2027-11-26",
   "native_retry_exhausted": true,
   "affected_start": "2027-11-26T08:00:00Z",
@@ -24,6 +26,7 @@
     "v3 sale with nested EUR grossAmount; identifiers removed",
     "v3 refund with negative units and nanos; identifiers removed"
   ],
+  "redaction_attested": true,
   "business_checks": {
     "expected_currency": "EUR",
     "settlement_feed_available": true,

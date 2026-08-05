@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from recovery_control_plane.agent_graph import Challenger, Proposer, run_review_loop
+from recovery_control_plane.authority import HmacRecoveryAuthority
 from recovery_control_plane.contracts import (
     BackfillWindow,
     IncidentEvidence,
@@ -15,6 +17,7 @@ from recovery_control_plane.contracts import (
     RepairIntent,
 )
 from recovery_control_plane.coordinator import (
+    build_evidence_manifest,
     RecoveryCoordinator,
     VerificationEvidence,
 )
@@ -28,7 +31,7 @@ from recovery_control_plane.normalization import BronzeOrder, normalize_and_dedu
 from recovery_control_plane.policy import ApprovedProfile, RecoveryPolicy, compile_intent
 from recovery_control_plane.profiles import MappingProfile, build_profile
 from recovery_control_plane.verifier import SettlementRecord
-from recovery_control_plane.worker import ExecutionApproval, RecoveryWorker
+from recovery_control_plane.worker import DryRunPipelineAdapter, RecoveryWorker
 
 
 UTC = timezone.utc
@@ -104,18 +107,20 @@ def load_json(name: str) -> object:
     return json.loads((ROOT / "fixtures" / name).read_text(encoding="utf-8"))
 
 
-class FixtureVerificationProvider:
-    """Load candidate and settlement proof only after the update completes."""
+class FixtureReplayAdapter(DryRunPipelineAdapter):
+    """Materialize the fixture candidate as part of the recorded update call."""
 
     def __init__(self, profile: MappingProfile) -> None:
+        super().__init__()
         self.profile = profile
-        self.candidates = ()
+        self.evidence_by_update: dict[str, VerificationEvidence] = {}
 
-    def load(self, *, plan, update_id) -> VerificationEvidence:
-        # ``plan`` and ``update_id`` identify the completed candidate snapshot
-        # in production. The offline fixture has one deterministic snapshot.
-        if not plan.action_id or not update_id:
-            raise ValueError("verification requires a completed recovery update")
+    def start_bounded_update(self, *, plan, predicate, action_id):
+        update_id = super().start_bounded_update(
+            plan=plan,
+            predicate=predicate,
+            action_id=action_id,
+        )
         source_rows = tuple(
             BronzeOrder.model_validate(item) for item in load_json("orders_replay.json")
         )
@@ -131,16 +136,64 @@ class FixtureVerificationProvider:
             and row.order_id is not None
             and row.source_sequence is not None
         )
-        self.candidates = tuple(normalize_and_dedupe(source_rows, self.profile))
+        candidates = tuple(normalize_and_dedupe(source_rows, self.profile))
         settlements = tuple(
             SettlementRecord.model_validate(item) for item in load_json("settlements.json")
         )
-        return VerificationEvidence(
-            expected_keys=expected_keys,
-            expected_v3_keys=expected_v3_keys,
-            candidates=self.candidates,
+        candidate_delta_version = plan.source_delta_version + 1
+        manifest, manifest_digest = build_evidence_manifest(
+            source_table=plan.source_table,
+            source_delta_version=plan.source_delta_version,
+            candidate_table=plan.candidate_dataset,
+            candidate_delta_version=candidate_delta_version,
+            update_id=update_id,
+            settlement_relation=plan.settlement_relation,
+            settlement_snapshot_reference="batch:black-friday-2027",
+            source_rows=source_rows,
+            candidates=candidates,
             settlements=settlements,
         )
+        self.evidence_by_update[update_id] = VerificationEvidence(
+            action_id=plan.action_id,
+            update_id=update_id,
+            pipeline_id=plan.pipeline_id,
+            pipeline_deployment=plan.pipeline_deployment,
+            profile_digest=plan.profile_digest,
+            source_table=plan.source_table,
+            source_delta_version=plan.source_delta_version,
+            source_fingerprint=plan.source_fingerprint,
+            candidate_table=plan.candidate_dataset,
+            candidate_delta_version=candidate_delta_version,
+            observed_start=plan.backfill_start,
+            observed_end=plan.backfill_end,
+            manifest=manifest,
+            manifest_digest=manifest_digest,
+            source_rows=source_rows,
+            expected_keys=expected_keys,
+            expected_v3_keys=expected_v3_keys,
+            candidates=candidates,
+            settlements=settlements,
+        )
+        return update_id
+
+
+class FixtureVerificationProvider:
+    """Read only evidence materialized by the exact completed fixture update."""
+
+    def __init__(self, adapter: FixtureReplayAdapter) -> None:
+        self.adapter = adapter
+        self.candidates = ()
+
+    def load(self, *, plan, update_id) -> VerificationEvidence:
+        stored = self.adapter.updates.get(update_id)
+        if stored != (plan.pipeline_id, plan.action_id):
+            raise ValueError("verification update is not the recorded replay")
+        try:
+            evidence = self.adapter.evidence_by_update[update_id]
+        except KeyError as exc:
+            raise RuntimeError("candidate evidence was not materialized by the update") from exc
+        self.candidates = evidence.candidates
+        return evidence
 
 
 def main() -> None:
@@ -153,7 +206,9 @@ def main() -> None:
         source_fingerprint="sha256:marketplace-it-v3-2027-11-26",
         normalizer_key="MARKETPLACE_V3_GROSS",
         normalizer_version="1.0.1",
-        normalizer_source_digest="sha256:reviewed-normalizer-2027-11-25",
+        normalizer_source_digest=(
+            "sha256:deefca6e8c07abf7e1acb6c7a890d54bc0aed343774b2a5c3a4b1ccd6a784ac1"
+        ),
         currency_code="EUR",
         currency_exponent=2,
         dedupe_key=("partner", "order_id", "source_sequence"),
@@ -188,8 +243,12 @@ def main() -> None:
         pipeline_id="pipeline-orders",
         pipeline_deployment="bundle:orders@abc123",
         dataset="commerce.orders_normalized",
+        candidate_dataset="commerce.orders_repaired",
+        source_table="commerce.orders_bronze",
         partner=profile.partner,
         payload_version=profile.payload_version,
+        currency_code=profile.currency_code,
+        settlement_relation="finance.settlements",
         source_fingerprint=profile.source_fingerprint,
         recovery_job_id=42,
         refresh_selection=("orders_repaired",),
@@ -206,25 +265,44 @@ def main() -> None:
         maximum_auto_rows=100_000,
         maximum_auto_dbus=5,
         maximum_downstream_assets=5,
+        maximum_replay_duration=timedelta(hours=2),
         profiles={approved.profile_id: approved},
     )
-    plan = compile_intent(passport, outcome.intent, policy, now=INCIDENT_TIME)
+    authority = HmacRecoveryAuthority(
+        key_id="local-ephemeral-key",
+        issuer="offline-policy-service",
+        secret=secrets.token_bytes(32),
+    )
+    plan = compile_intent(
+        passport,
+        outcome.intent,
+        policy,
+        now=INCIDENT_TIME,
+        authority_signer=authority,
+    )
 
     # The fixture deliberately uses the human lane. Approval is bound to the
     # compiled action ID and expires before the plan's own authority deadline.
-    approval = ExecutionApproval(
-        action_id=plan.action_id,
+    approval = authority.issue_approval(
+        plan=plan,
+        record_id="offline-approval-1",
         approved_by="on-call-data-owner",
         approved_at=INCIDENT_TIME + timedelta(minutes=4),
         expires_at=INCIDENT_TIME + timedelta(minutes=20),
     )
     store = InMemoryIncidentStore()
-    verification_provider = FixtureVerificationProvider(profile)
+    replay_adapter = FixtureReplayAdapter(profile)
+    verification_provider = FixtureVerificationProvider(replay_adapter)
     coordinator = RecoveryCoordinator(
         worker=RecoveryWorker(
-            clock=FixedClock(INCIDENT_TIME + timedelta(minutes=5))
+            replay_adapter,
+            clock=FixedClock(INCIDENT_TIME + timedelta(minutes=5)),
+            plan_authority=authority,
+            approval_authority=authority,
         ),
         evidence_provider=verification_provider,
+        receipt_authority_signer=authority,
+        receipt_authority_verifier=authority,
         clock=FixedClock(INCIDENT_TIME + timedelta(minutes=6)),
     )
     result = coordinator.run(

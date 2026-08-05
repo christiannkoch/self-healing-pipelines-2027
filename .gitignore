@@ -13,3 +13,7 @@ venv/
 .env
 .databricks/
 
+# Local LangGraph checkpoints can retain incident, model, and reviewer content.
+*.sqlite
+*.sqlite3
+*.db

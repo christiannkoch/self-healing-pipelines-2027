@@ -4,14 +4,29 @@ resources:
     orders_recovery:
       name: ${bundle.target}-orders-recovery-reference
       catalog: ${var.catalog}
-      target: ${var.schema}
-      channel: PREVIEW
+      schema: ${var.schema}
+      channel: CURRENT
       continuous: false
       serverless: true
+      deployment:
+        kind: BUNDLE
       libraries:
         - file:
             path: ../databricks/transformations/orders_pipeline.py
       configuration:
         source.orders_table: ${var.bronze_orders_table}
+        source.rescued_data_column: _rescued_data
+        recovery.source_delta_version: ${var.source_delta_version}
         recovery.profile_digest: ${var.mapping_profile_digest}
+        recovery.profile_id: marketplace-v3-gross-eur-v2
+        recovery.profile_partner: marketplace_it
+        recovery.profile_payload_version: v3
+        recovery.source_fingerprint: ${var.source_fingerprint}
+        recovery.legacy_payload_versions: v2
+        recovery.normalizer_key: MARKETPLACE_V3_GROSS
+        recovery.normalizer_version: 1.0.1
+        recovery.normalizer_source_digest: sha256:deefca6e8c07abf7e1acb6c7a890d54bc0aed343774b2a5c3a4b1ccd6a784ac1
+        recovery.currency_code: EUR
+        recovery.currency_exponent: "2"
+        recovery.dedupe_key: partner,order_id,source_sequence
       development: true

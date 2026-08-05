@@ -12,8 +12,12 @@ variables:
     description: Existing non-production schema used by the isolated trial.
   bronze_orders_table:
     description: Fully qualified immutable bronze source table.
+  source_delta_version:
+    description: Exact bronze Delta version sealed into this recovery deployment.
   mapping_profile_digest:
     description: SHA-256 digest of the reviewed marketplace v3 mapping profile.
+  source_fingerprint:
+    description: Immutable fingerprint of the reviewed marketplace v3 source contract.
 
 targets:
   dev:

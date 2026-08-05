@@ -1,0 +1,41 @@
+{
+  "currency_code": "EUR",
+  "currency_exponent": 2,
+  "dedupe_key": [
+    "partner",
+    "order_id",
+    "source_sequence"
+  ],
+  "legacy_payload_versions": [
+    "v2"
+  ],
+  "legacy_fields": {
+    "amount_minor": "order_total_minor",
+    "currency": "currency",
+    "customer_id": "customer_id"
+  },
+  "money_rule": {
+    "formula": "units * 100 + nanos * 100 / 1000000000",
+    "nanos_bound": "abs(nanos) < 1000000000",
+    "representation": "signed integer minor units without rounding",
+    "sign_rule": "nonzero units and nanos must have the same sign"
+  },
+  "normalizer_key": "MARKETPLACE_V3_GROSS",
+  "normalizer_version": "1.0.1",
+  "partner": "marketplace_it",
+  "profile_payload_version": "v3",
+  "tie_policy": "equal operational rank with different content is ambiguous and invalid",
+  "v3_fields": {
+    "amount_nanos": "rescued_data.grossAmount.nanos",
+    "amount_units": "rescued_data.grossAmount.units",
+    "currency": "rescued_data.grossAmount.currencyCode",
+    "customer_id": "rescued_data.buyer.customerId"
+  },
+  "winner_order": [
+    "canonical_valid_desc",
+    "profile_version_desc",
+    "ingested_at_desc",
+    "transport_id_desc",
+    "content_digest_desc"
+  ]
+}

@@ -11,8 +11,8 @@
   },
   {
     "case": "null winner payload version",
-    "unsafe_expression": "c.payload_version <> 'v3'",
-    "required_expression": "c.payload_version IS DISTINCT FROM 'v3'"
+    "unsafe_expression": "c.payload_version <> :required_profile_version",
+    "required_expression": "c.payload_version IS DISTINCT FROM :required_profile_version"
   },
   {
     "case": "null winner canonical validity",
@@ -27,7 +27,7 @@
   {
     "case": "null candidate currency",
     "unsafe_expression": "c.currency <> s.currency",
-    "required_expression": "c.currency IS DISTINCT FROM s.currency"
+    "required_expression": "WHEN c.currency IS NULL THEN 1"
   },
   {
     "case": "null required profile parameter",

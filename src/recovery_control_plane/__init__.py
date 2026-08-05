@@ -11,14 +11,30 @@ from .contracts import (
     RepairAction,
     RepairIntent,
 )
+from .authority import (
+    ApprovalAuthorityVerifier,
+    ExecutionApproval,
+    HmacRecoveryAuthority,
+    PlanAuthoritySigner,
+    PlanAuthorityVerifier,
+    VerificationReceiptAuthoritySigner,
+    VerificationReceiptAuthorityVerifier,
+)
 from .coordinator import RecoveryCoordinator, VerificationReceipt
 from .policy import CompiledPlan, PolicyDenied, compile_intent
 
 __all__ = [
     "BackfillWindow",
+    "ApprovalAuthorityVerifier",
     "CompiledPlan",
     "IncidentEvidence",
     "IntentReview",
+    "ExecutionApproval",
+    "HmacRecoveryAuthority",
+    "PlanAuthoritySigner",
+    "PlanAuthorityVerifier",
+    "VerificationReceiptAuthoritySigner",
+    "VerificationReceiptAuthorityVerifier",
     "PolicyDenied",
     "RepairAction",
     "RepairIntent",
