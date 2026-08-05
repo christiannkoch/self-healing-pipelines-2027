@@ -240,9 +240,12 @@ source fingerprint, exact replay window, verifier version, metrics, verification
 time, and authority deadline.
 
 The coordinator reloads that immutable journal representation before calling
-the promotion port. An in-memory `True` value cannot authorize promotion. A
-failed update, failed invariant, failed receipt write, forged or future-dated
-receipt, or expired deadline leaves the candidate unpromoted.
+the promotion port, re-runs the deterministic metric assertions, and requires
+the receipt's exact update ID to exist in a `COMPLETED` worker journal. An
+in-memory `True` value—or a correctly hashed receipt carrying failing metrics—
+cannot authorize promotion. A failed update, failed invariant, failed receipt
+write, forged or future-dated receipt, or expired deadline leaves the candidate
+unpromoted.
 
 `DryRunPromotionAdapter` makes the complete sequence executable offline and is
 idempotent by proof digest. It does not expose a production table or view.

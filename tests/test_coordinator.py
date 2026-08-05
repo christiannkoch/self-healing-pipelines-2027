@@ -386,3 +386,120 @@ def test_validly_digested_future_receipt_is_rejected_before_promotion(
         coordinator.run(plan, store, approval=None, maximum_polls=1)
 
     assert promotion.calls == 0
+
+
+def test_correctly_redigested_failing_metrics_receipt_cannot_promote(
+    evidence,
+    repair_intent,
+    policy,
+    mapping_profile,
+) -> None:
+    plan, _, _, _, _, good_store, good_coordinator, approval = build_runtime(
+        evidence,
+        repair_intent,
+        policy,
+        mapping_profile,
+    )
+    good = good_coordinator.run(
+        plan,
+        good_store,
+        approval=approval,
+        maximum_polls=1,
+    )
+    failing_metrics = good.verification.metrics.model_copy(
+        update={"duplicate_business_events": 1}
+    )
+    failing_receipt = build_verification_receipt(
+        plan=plan,
+        update_id=good.update_id,
+        verified_at=BASE_TIME + timedelta(minutes=3),
+        metrics=failing_metrics,
+    )
+    store = InMemoryIncidentStore()
+    store.put_external_id(plan.action_id, RecoveryWorker.STEP, good.update_id)
+    assert store.compare_and_set_state(
+        plan.action_id,
+        RecoveryWorker.STEP,
+        None,
+        RecoveryWorker.COMPLETED,
+    )
+    store.put_stage(
+        plan.action_id,
+        RecoveryCoordinator.VERIFICATION_STAGE,
+        failing_receipt.model_dump(mode="json"),
+    )
+    promotion = RecordingPromotion([])
+    coordinator = RecoveryCoordinator(
+        worker=good_coordinator.worker,
+        evidence_provider=good_coordinator.evidence_provider,
+        promotion_adapter=promotion,
+        clock=FrozenClock(BASE_TIME + timedelta(minutes=4)),
+    )
+
+    with pytest.raises(VerificationFailed, match="duplicate_business_events"):
+        coordinator.run(plan, store, approval=None, maximum_polls=1)
+
+    assert promotion.calls == 0
+
+
+@pytest.mark.parametrize(
+    ("journal_state", "message"),
+    [
+        (RecoveryWorker.COMPLETED, "lacks its exact update journal"),
+        (RecoveryWorker.ACCEPTED, "not journaled as COMPLETED"),
+    ],
+)
+def test_persisted_receipt_requires_exact_completed_update_journal(
+    evidence,
+    repair_intent,
+    policy,
+    mapping_profile,
+    journal_state,
+    message,
+) -> None:
+    plan, _, _, _, _, good_store, good_coordinator, approval = build_runtime(
+        evidence,
+        repair_intent,
+        policy,
+        mapping_profile,
+    )
+    good = good_coordinator.run(
+        plan,
+        good_store,
+        approval=approval,
+        maximum_polls=1,
+    )
+    store = InMemoryIncidentStore()
+    if journal_state == RecoveryWorker.COMPLETED:
+        # Completed state without an external update ID is still insufficient.
+        assert store.compare_and_set_state(
+            plan.action_id,
+            RecoveryWorker.STEP,
+            None,
+            RecoveryWorker.COMPLETED,
+        )
+    else:
+        store.put_external_id(plan.action_id, RecoveryWorker.STEP, good.update_id)
+        assert store.compare_and_set_state(
+            plan.action_id,
+            RecoveryWorker.STEP,
+            None,
+            journal_state,
+        )
+    store.put_stage(
+        plan.action_id,
+        RecoveryCoordinator.VERIFICATION_STAGE,
+        good.verification.model_dump(mode="json"),
+    )
+    promotion = RecordingPromotion([])
+    coordinator = RecoveryCoordinator(
+        worker=good_coordinator.worker,
+        evidence_provider=good_coordinator.evidence_provider,
+        promotion_adapter=promotion,
+        clock=FrozenClock(BASE_TIME + timedelta(minutes=4)),
+    )
+
+    with pytest.raises(ValueError, match=message):
+        coordinator.run(plan, store, approval=None, maximum_polls=1)
+
+    assert promotion.calls == 0

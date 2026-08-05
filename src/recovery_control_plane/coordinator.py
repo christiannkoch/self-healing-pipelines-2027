@@ -17,6 +17,7 @@ from .verifier import (
     BusinessKey,
     SettlementRecord,
     VerificationMetrics,
+    assert_verified,
     verify_candidate,
 )
 from .worker import Clock, ExecutionApproval, RecoveryWorker, UtcClock
@@ -144,6 +145,13 @@ class VerificationReceipt(BaseModel):
             raise ValueError("verification occurred after execution authority expired")
         if now is not None and verified > now.astimezone(timezone.utc):
             raise ValueError("verification receipt is future-dated")
+        # A valid digest proves immutability, not correctness. Re-run the
+        # deterministic promotion invariants whenever a receipt is consumed.
+        assert_verified(
+            self.metrics,
+            maximum_rows=plan.maximum_rows,
+            settlement_tolerance_minor=plan.settlement_tolerance_minor,
+        )
 
 
 def build_verification_receipt(
@@ -266,7 +274,20 @@ class RecoveryCoordinator:
             store.get_stage(plan.action_id, self.VERIFICATION_STAGE)
         )
         receipt.validate_for(plan, update_id, now=now)
+        self._assert_completed_update(plan, store, update_id)
         return receipt
+
+    def _assert_completed_update(
+        self,
+        plan: CompiledPlan,
+        store: IncidentStore,
+        update_id: str,
+    ) -> None:
+        stored_update_id = store.get_external_id(plan.action_id, self.worker.STEP)
+        if stored_update_id != update_id:
+            raise ValueError("verification receipt lacks its exact update journal")
+        if store.get_state(plan.action_id, self.worker.STEP) != self.worker.COMPLETED:
+            raise ValueError("verification receipt update is not journaled as COMPLETED")
 
     def _load_promotion(
         self,
@@ -304,10 +325,8 @@ class RecoveryCoordinator:
                 store.get_stage(plan.action_id, self.VERIFICATION_STAGE)
             )
             update_id = receipt.update_id
-            stored_update_id = store.get_external_id(plan.action_id, self.worker.STEP)
-            if stored_update_id is not None and stored_update_id != update_id:
-                raise ValueError("verification receipt conflicts with the incident journal")
             receipt.validate_for(plan, update_id, now=self._now())
+            self._assert_completed_update(plan, store, update_id)
         else:
             update_id = self.worker.run(
                 plan,
